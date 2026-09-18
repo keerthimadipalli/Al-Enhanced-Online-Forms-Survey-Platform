@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Analytics – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="dashboard.html">← Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <div class="sidebar">
+      <a href="dashboard.html">📋 My Forms</a>
+      <a href="create-form.html">➕ New Form</a>
+      <a href="analytics.html" class="active">📊 Analytics</a>
+      <a href="question-gen.html">💡 Question Ideas</a>
+    </div>
+    <div class="main-content">
+      <div class="page-header">
+        <h1 id="pageTitle">Response Analytics</h1>
+        <p id="pageSubtitle">All responses collected for this form.</p>
+      </div>
+
+      <!-- Form selector if no id -->
+      <div id="formSelector" style="display:none;margin-bottom:20px;">
+        <label style="font-size:0.9rem;font-weight:600;display:block;margin-bottom:8px;">Select a form to view:</label>
+        <select id="formSelect" class="form-group" onchange="location.href='analytics.html?id='+this.value" style="padding:9px 14px;border:1px solid var(--border);border-radius:8px;background:white;font-family:inherit;">
+          <option value="">-- Select Form --</option>
+        </select>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-row" id="statsRow">
+        <div class="stat-box"><div class="stat-num" id="statTotal">–</div><div class="stat-label">Total Responses</div></div>
+        <div class="stat-box"><div class="stat-num" id="statPos">–</div><div class="stat-label">Positive</div></div>
+        <div class="stat-box"><div class="stat-num" id="statNeu">–</div><div class="stat-label">Neutral</div></div>
+        <div class="stat-box"><div class="stat-num" id="statNeg">–</div><div class="stat-label">Negative</div></div>
+      </div>
+
+      <!-- Response prediction -->
+      <div class="chart-area" id="predictionArea">
+        <h4>Response Category (Predicted)</h4>
+        <div id="predTag" style="margin-bottom:14px;font-size:0.9rem;color:var(--muted);">Loading...</div>
+        <div class="bar-chart" id="catChart"></div>
+      </div>
+
+      <!-- Question breakdown -->
+      <div class="chart-area" id="questionBreakdown">
+        <h4>Question-wise Summary</h4>
+        <div id="qBreakdown"></div>
+      </div>
+
+      <!-- Insight box -->
+      <div class="insight-box" id="insightBox">
+        <h4>📝 Summary & Observations</h4>
+        <div id="insightText" style="color:var(--muted);font-size:0.88rem;">Click "Generate Insight" to get a plain-English summary of your responses.</div>
+        <button class="btn-primary mt-16" onclick="generateInsight()" id="genInsightBtn">Generate Insight</button>
+      </div>
+
+      <!-- Responses table -->
+      <div class="chart-area" style="margin-top:20px;overflow-x:auto;">
+        <h4>All Responses</h4>
+        <div id="respTable" style="margin-top:14px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get('id');
+    let currentForm = null;
+    let currentResponses = [];
+
+    function loadAnalytics() {
+      if (!formId) {
+        document.getElementById('formSelector').style.display = 'block';
+        // Load all forms
+        fetch('http://localhost:5000/api/forms').then(r => r.json()).then(d => populateSelector(d.forms))
+          .catch(() => {
+            const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+            populateSelector(forms);
+          });
+        return;
+      }
+
+      fetch('http://localhost:5000/api/forms/' + formId)
+        .then(r => r.json()).then(f => { currentForm = f; loadResponses(f); })
+        .catch(() => {
+          const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+          currentForm = forms.find(x => x.id === formId);
+          if (currentForm) {
+            const resps = JSON.parse(localStorage.getItem('ff_resp_' + formId) || '[]');
+            currentResponses = resps;
+            renderAnalytics(currentForm, resps);
+          }
+        });
+    }
+
+    function populateSelector(forms) {
+      const sel = document.getElementById('formSelect');
+      forms.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f.id; o.textContent = f.title;
+        sel.appendChild(o);
+      });
+    }
+
+    function loadResponses(form) {
+      fetch('http://localhost:5000/api/responses/' + formId)
+        .then(r => r.json()).then(d => { currentResponses = d.responses || []; renderAnalytics(form, currentResponses); })
+        .catch(() => {
+          const resps = JSON.parse(localStorage.getItem('ff_resp_' + formId) || '[]');
+          currentResponses = resps;
+          renderAnalytics(form, resps);
+        });
+    }
+
+    function renderAnalytics(form, responses) {
+      document.getElementById('pageTitle').textContent = form.title + ' — Analytics';
+      document.getElementById('pageSubtitle').textContent = responses.length + ' response(s) collected.';
+
+      const total = responses.length;
+      document.getElementById('statTotal').textContent = total;
+
+      // Simple sentiment analysis based on text keywords
+      let pos = 0, neu = 0, neg = 0;
+      const posWords = ['good','great','excellent','love','amazing','perfect','helpful','satisfied','happy','best'];
+      const negWords = ['bad','poor','terrible','awful','disappointed','hate','worst','unhelpful','slow','broken'];
+
+      responses.forEach(r => {
+        let score = 0;
+        Object.values(r.answers || {}).forEach(ans => {
+          const low = (ans || '').toLowerCase();
+          posWords.forEach(w => { if (low.includes(w)) score++; });
+          negWords.forEach(w => { if (low.includes(w)) score--; });
+          if (['4','5','⭐⭐⭐⭐','⭐⭐⭐⭐⭐'].includes(ans)) score++;
+          if (['1','2'].includes(ans)) score--;
+        });
+        if (score > 0) pos++;
+        else if (score < 0) neg++;
+        else neu++;
+      });
+
+      document.getElementById('statPos').textContent = pos;
+      document.getElementById('statNeu').textContent = neu;
+      document.getElementById('statNeg').textContent = neg;
+
+      // Category prediction
+      let predLabel = 'Neutral Feedback';
+      let predColor = 'var(--warn)';
+      if (total === 0) { predLabel = 'No data yet'; predColor = 'var(--muted)'; }
+      else if (pos > neg && pos >= neu) { predLabel = 'Positive Feedback'; predColor = '#1e5c3f'; }
+      else if (neg > pos && neg >= neu) { predLabel = 'Negative Feedback'; predColor = 'var(--danger)'; }
+
+      const likelihood = total === 0 ? 'Low' : total < 5 ? 'Moderate' : 'High';
+      document.getElementById('predTag').innerHTML = `
+        <span>Predicted category: </span>
+        <span class="prediction-tag" style="background:${predColor}22;color:${predColor};border:1px solid ${predColor}44;">${predLabel}</span>
+        &nbsp;&nbsp;
+        <span>Response likelihood: </span>
+        <span class="prediction-tag" style="background:#e8f4fd;color:#1a6fa8;border:1px solid #a8d4f0;">${likelihood} Response Chance</span>
+      `;
+
+      // Bar chart
+      const catChart = document.getElementById('catChart');
+      const maxV = Math.max(pos, neu, neg, 1);
+      catChart.innerHTML = [
+        { label: 'Positive', val: pos, cls: '' },
+        { label: 'Neutral', val: neu, cls: 'neutral' },
+        { label: 'Negative', val: neg, cls: 'negative' },
+      ].map(item => `
+        <div class="bar-row">
+          <span class="bar-label">${item.label}</span>
+          <div class="bar-track">
+            <div class="bar-fill ${item.cls}" style="width:${total?Math.round(item.val/maxV*100):0}%">${item.val}</div>
+          </div>
+        </div>`).join('');
+
+      // Question breakdown
+      if (form.questions) {
+        let qhtml = '';
+        form.questions.forEach((q, i) => {
+          if (q.type === 'mcq' || q.type === 'rating') {
+            const counts = {};
+            responses.forEach(r => {
+              const ans = r.answers['q' + i];
+              if (ans) counts[ans] = (counts[ans] || 0) + 1;
+            });
+            const maxC = Math.max(...Object.values(counts), 1);
+            qhtml += `<div style="margin-bottom:20px;"><p style="font-size:0.88rem;font-weight:600;margin-bottom:10px;">${i+1}. ${q.text}</p>`;
+            qhtml += '<div class="bar-chart">';
+            Object.entries(counts).forEach(([opt, cnt]) => {
+              qhtml += `<div class="bar-row"><span class="bar-label" style="font-size:0.78rem;">${opt}</span>
+                <div class="bar-track"><div class="bar-fill" style="width:${Math.round(cnt/maxC*100)}%">${cnt}</div></div></div>`;
+            });
+            if (!Object.keys(counts).length) qhtml += '<p class="text-muted">No answers yet.</p>';
+            qhtml += '</div></div>';
+          }
+        });
+        document.getElementById('qBreakdown').innerHTML = qhtml || '<p class="text-muted">No MCQ/rating questions found.</p>';
+      }
+
+      // Responses table
+      if (total > 0 && form.questions) {
+        let thtml = `<table class="resp-table"><thead><tr><th>#</th><th>Time</th>`;
+        form.questions.forEach((q, i) => { thtml += `<th>${q.text.slice(0, 30)}...</th>`; });
+        thtml += '</tr></thead><tbody>';
+        responses.forEach((r, idx) => {
+          const t = r.submitted_at ? new Date(r.submitted_at).toLocaleString() : '–';
+          thtml += `<tr><td>${idx+1}</td><td>${t}</td>`;
+          form.questions.forEach((q, i) => { thtml += `<td>${r.answers['q'+i] || '–'}</td>`; });
+          thtml += '</tr>';
+        });
+        thtml += '</tbody></table>';
+        document.getElementById('respTable').innerHTML = thtml;
+      } else {
+        document.getElementById('respTable').innerHTML = '<p class="text-muted">No responses yet.</p>';
+      }
+    }
+
+    function generateInsight() {
+      const btn = document.getElementById('genInsightBtn');
+      const box = document.getElementById('insightText');
+      btn.disabled = true; btn.textContent = 'Generating...';
+
+      // Send to backend (Gemini/OpenAI)
+      const payload = {
+        form_title: currentForm ? currentForm.title : 'Survey',
+        total: currentResponses.length,
+        responses: currentResponses.slice(0, 20) // send max 20
+      };
+
+      fetch('http://localhost:5000/api/generate-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(d => {
+        box.textContent = d.insight || 'No insight generated.';
+        btn.textContent = 'Regenerate';
+        btn.disabled = false;
+      })
+      .catch(() => {
+        // Fallback local insight
+        const total = currentResponses.length;
+        if (total === 0) {
+          box.textContent = 'No responses have been collected yet. Share the form link to start gathering feedback.';
+        } else {
+          const posW = ['great','good','excellent','love','helpful','satisfied','happy'];
+          let posCount = 0, negCount = 0;
+          currentResponses.forEach(r => {
+            Object.values(r.answers || {}).forEach(ans => {
+              posW.forEach(w => { if ((ans||'').toLowerCase().includes(w)) posCount++; });
+            });
+          });
+
+          const sentiment = posCount > negCount ? 'mostly positive' : 'mixed';
+          box.textContent = `This form received ${total} response(s). Overall feedback appears ${sentiment}. ` +
+            (total < 5 ? 'The sample size is still small; collect more responses for reliable conclusions. ' : '') +
+            'Key areas to review include the most common answers to your multiple-choice questions. Consider following up with respondents who gave lower ratings to understand what could be improved.';
+        }
+        btn.textContent = 'Regenerate';
+        btn.disabled = false;
+      });
+    }
+
+    loadAnalytics();
+  </script>
+</body>
+</html>

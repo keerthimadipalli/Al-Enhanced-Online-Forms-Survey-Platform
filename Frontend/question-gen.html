@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Question Ideas – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="dashboard.html">← Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <div class="sidebar">
+      <a href="dashboard.html">📋 My Forms</a>
+      <a href="create-form.html">➕ New Form</a>
+      <a href="analytics.html">📊 Analytics</a>
+      <a href="question-gen.html" class="active">💡 Question Ideas</a>
+    </div>
+    <div class="main-content">
+      <div class="page-header">
+        <h1>Question Ideas</h1>
+        <p>Describe what your form is about and get ready-to-use question suggestions.</p>
+      </div>
+
+      <div class="gen-box" style="max-width:640px;">
+        <h3>What's your form about?</h3>
+        <div class="form-group">
+          <label>Topic / Purpose</label>
+          <input type="text" id="topic" placeholder="e.g. Post-event feedback, Product satisfaction, Employee check-in..." />
+        </div>
+        <div class="form-group">
+          <label>How many questions? (1–10)</label>
+          <input type="number" id="numQ" value="5" min="1" max="10" style="width:100px;" />
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="qType">
+            <option value="mixed">Mixed (text + MCQ)</option>
+            <option value="text">Text answers only</option>
+            <option value="mcq">Multiple choice only</option>
+            <option value="rating">Rating scale</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="generateQuestions()" id="genBtn">Generate Questions</button>
+        <div class="gen-output" id="genOutput" style="display:none;"></div>
+        <button class="btn-outline mt-10" id="useBtn" style="display:none;" onclick="useQuestions()">Use These in a New Form →</button>
+      </div>
+
+      <div class="gen-box" style="max-width:640px;">
+        <h3>Template suggestions</h3>
+        <p style="font-size:0.85rem;color:var(--muted);margin-bottom:14px;">Click any template to auto-fill the topic above.</p>
+        <div class="flex-row" style="flex-wrap:wrap;gap:8px;">
+          <button class="fcp-opt" onclick="setTopic('Post-event feedback')">Post-event feedback</button>
+          <button class="fcp-opt" onclick="setTopic('Product satisfaction survey')">Product satisfaction</button>
+          <button class="fcp-opt" onclick="setTopic('Employee wellbeing check-in')">Employee wellbeing</button>
+          <button class="fcp-opt" onclick="setTopic('Course/training feedback')">Course feedback</button>
+          <button class="fcp-opt" onclick="setTopic('Customer support experience')">Customer support</button>
+          <button class="fcp-opt" onclick="setTopic('Website usability survey')">Website usability</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let generatedText = '';
+
+    function setTopic(t) {
+      document.getElementById('topic').value = t;
+      document.getElementById('topic').focus();
+    }
+
+    function generateQuestions() {
+      const topic = document.getElementById('topic').value.trim();
+      const num = parseInt(document.getElementById('numQ').value) || 5;
+      const type = document.getElementById('qType').value;
+      const output = document.getElementById('genOutput');
+      const btn = document.getElementById('genBtn');
+      const useBtn = document.getElementById('useBtn');
+
+      if (!topic) { alert('Please enter a topic first.'); return; }
+
+      btn.disabled = true; btn.textContent = 'Generating...';
+      output.style.display = 'block';
+      output.innerHTML = '<span class="loading-dots">Thinking</span>';
+      useBtn.style.display = 'none';
+
+      fetch('http://localhost:5000/api/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, num_questions: num, question_type: type })
+      })
+      .then(r => r.json())
+      .then(d => {
+        generatedText = d.questions || '';
+        output.textContent = generatedText;
+        useBtn.style.display = 'inline-block';
+        btn.textContent = 'Generate Again';
+        btn.disabled = false;
+      })
+      .catch(() => {
+        // Fallback: built-in templates
+        generatedText = getFallbackQuestions(topic, num, type);
+        output.textContent = generatedText;
+        useBtn.style.display = 'inline-block';
+        btn.textContent = 'Generate Again';
+        btn.disabled = false;
+      });
+    }
+
+    function getFallbackQuestions(topic, num, type) {
+      const banks = {
+        text: [
+          `What did you enjoy most about ${topic}?`,
+          `What could be improved regarding ${topic}?`,
+          `Please describe your overall experience.`,
+          `What suggestions do you have for us?`,
+          `Is there anything else you'd like us to know?`,
+          `How would you describe this in your own words?`,
+        ],
+        mcq: [
+          `How satisfied were you overall? (Excellent / Good / Average / Poor)`,
+          `Would you recommend this to others? (Definitely / Maybe / No)`,
+          `How did you hear about this? (Social media / Word of mouth / Email / Other)`,
+          `How often do you use this? (Daily / Weekly / Monthly / Rarely)`,
+          `Which feature did you find most useful? (Feature A / Feature B / Feature C)`,
+        ],
+        rating: [
+          `Rate the overall quality. (1–5)`,
+          `Rate the ease of use. (1–5)`,
+          `Rate how helpful the support was. (1–5)`,
+          `Rate your satisfaction with the outcome. (1–5)`,
+          `Rate how likely you are to recommend this. (1–5)`,
+        ]
+      };
+
+      let pool = [];
+      if (type === 'mixed') {
+        pool = [...banks.text, ...banks.mcq, ...banks.rating];
+      } else {
+        pool = banks[type] || banks.text;
+      }
+
+      const selected = pool.slice(0, num);
+      return selected.map((q, i) => `${i+1}. ${q}`).join('\n\n');
+    }
+
+    function useQuestions() {
+      localStorage.setItem('ff_gen_questions', generatedText);
+      window.location.href = 'create-form.html?from=gen';
+    }
+  </script>
+</body>
+</html>

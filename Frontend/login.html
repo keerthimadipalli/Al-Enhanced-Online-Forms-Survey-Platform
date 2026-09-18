@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login – FormFlow</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="login.html" class="active">Login</a>
+      <a href="register.html">Register</a>
+    </div>
+  </nav>
+
+  <div class="auth-wrapper">
+    <div class="auth-card">
+      <h2>Welcome back</h2>
+      <p>Sign in to access your forms and responses.</p>
+
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Your password" />
+      </div>
+
+      <p class="error-msg" id="errorMsg">Invalid email or password.</p>
+      <p class="success-msg" id="successMsg">Logged in! Redirecting...</p>
+
+      <button class="btn-primary btn-block mt-10" onclick="handleLogin()">Sign In</button>
+
+      <div class="auth-footer">
+        Don't have an account? <a href="register.html">Register here</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    function handleLogin() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const err = document.getElementById('errorMsg');
+      const ok = document.getElementById('successMsg');
+      err.style.display = 'none'; ok.style.display = 'none';
+
+      if (!email || !password) { err.textContent = 'Please fill in all fields.'; err.style.display = 'block'; return; }
+
+      fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          ok.style.display = 'block';
+          setTimeout(() => window.location.href = 'dashboard.html', 900);
+        } else {
+          err.textContent = data.message || 'Login failed.';
+          err.style.display = 'block';
+        }
+      })
+      .catch(() => {
+        // Fallback demo login for testing
+        const users = JSON.parse(localStorage.getItem('ff_users') || '[]');
+        const found = users.find(u => u.email === email && u.password === password);
+        if (found) {
+          localStorage.setItem('user', JSON.stringify({ name: found.name, email: found.email }));
+          ok.style.display = 'block';
+          setTimeout(() => window.location.href = 'dashboard.html', 900);
+        } else if (email === 'demo@formflow.com' && password === 'demo123') {
+          localStorage.setItem('user', JSON.stringify({ name: 'Demo User', email }));
+          ok.style.display = 'block';
+          setTimeout(() => window.location.href = 'dashboard.html', 900);
+        } else {
+          err.textContent = 'Account not found. Please register first.';
+          err.style.display = 'block';
+        }
+      });
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  </script>
+</body>
+</html>

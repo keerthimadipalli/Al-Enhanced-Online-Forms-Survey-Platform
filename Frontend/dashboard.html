@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <span id="userGreet" style="color:var(--muted);font-size:0.88rem;margin-left:20px;"></span>
+      <a href="#" onclick="logout()" style="margin-left:12px;color:var(--danger);">Logout</a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <div class="sidebar">
+      <a href="dashboard.html" class="active">📋 My Forms</a>
+      <a href="create-form.html">➕ New Form</a>
+      <a href="analytics.html">📊 Analytics</a>
+      <a href="question-gen.html">💡 Question Ideas</a>
+    </div>
+    <div class="main-content">
+      <div class="page-header">
+        <h1>My Forms</h1>
+        <p>All your forms in one place. Click any form to manage it.</p>
+      </div>
+      <div class="flex-row" style="margin-bottom:22px;">
+        <a href="create-form.html" class="btn-primary">+ Create New Form</a>
+      </div>
+
+      <div class="forms-grid" id="formsGrid">
+        <p class="text-muted">Loading forms...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    // Greet
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    if (u.name) document.getElementById('userGreet').textContent = 'Hi, ' + u.name;
+
+    function logout() {
+      localStorage.removeItem('user');
+      window.location.href = 'login.html';
+    }
+
+    function loadForms() {
+      const grid = document.getElementById('formsGrid');
+      fetch('http://localhost:5000/api/forms')
+        .then(r => r.json())
+        .then(data => renderForms(data.forms || []))
+        .catch(() => {
+          const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+          renderForms(forms);
+        });
+    }
+
+    function renderForms(forms) {
+      const grid = document.getElementById('formsGrid');
+      if (!forms.length) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px 0;color:var(--muted);">
+          <div style="font-size:2.5rem;margin-bottom:12px;">📋</div>
+          <p>No forms yet. <a href="create-form.html" style="color:var(--accent);font-weight:600;">Create your first form →</a></p>
+        </div>`;
+        return;
+      }
+      grid.innerHTML = forms.map(f => {
+        const responses = f.responses || 0;
+        const date = f.created_at ? new Date(f.created_at).toLocaleDateString() : 'Today';
+        return `
+          <div class="form-card">
+            <h3>${f.title}</h3>
+            <p>${f.description || 'No description'}</p>
+            <div class="card-meta">
+              <span>📝 ${f.questions ? f.questions.length : 0} questions</span>
+              <span>📨 ${responses} responses</span>
+              <span>📅 ${date}</span>
+            </div>
+            <div class="card-actions">
+              <a href="analytics.html?id=${f.id}">📊 Analytics</a>
+              <a href="share.html?id=${f.id}">🔗 Share</a>
+              <a href="form.html?id=${f.id}" target="_blank">👁 Preview</a>
+              <button onclick="deleteForm('${f.id}')">🗑 Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function deleteForm(id) {
+      if (!confirm('Delete this form and all its responses?')) return;
+      fetch(`http://localhost:5000/api/forms/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => loadForms())
+        .catch(() => {
+          let forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+          forms = forms.filter(f => f.id !== id);
+          localStorage.setItem('ff_forms', JSON.stringify(forms));
+          showToast('Form deleted.');
+          loadForms();
+        });
+    }
+
+    loadForms();
+  </script>
+</body>
+</html>

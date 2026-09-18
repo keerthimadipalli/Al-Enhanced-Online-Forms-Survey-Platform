@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Share Form – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="dashboard.html">← Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <div class="sidebar">
+      <a href="dashboard.html">📋 My Forms</a>
+      <a href="create-form.html">➕ New Form</a>
+      <a href="analytics.html">📊 Analytics</a>
+      <a href="question-gen.html">💡 Question Ideas</a>
+    </div>
+    <div class="main-content">
+      <div class="page-header">
+        <h1 id="formTitleHead">Share Your Form</h1>
+        <p>Copy the link below and share it with your audience.</p>
+      </div>
+
+      <div class="share-section">
+        <div class="link-box">
+          <label>Shareable Link</label>
+          <div class="link-copy-row">
+            <input type="text" id="shareLink" readonly />
+            <button class="copy-btn" onclick="copyLink()">Copy</button>
+          </div>
+        </div>
+
+        <div class="link-box">
+          <label>Share via</label>
+          <div class="flex-row mt-10">
+            <button class="btn-outline" onclick="shareWA()">📱 WhatsApp</button>
+            <button class="btn-outline" onclick="shareEmail()">✉️ Email</button>
+            <a id="previewBtn" href="#" target="_blank" class="btn-outline">👁 Preview Form</a>
+          </div>
+        </div>
+
+        <div class="link-box">
+          <label>What's next?</label>
+          <div class="flex-row mt-10">
+            <a id="analyticsBtn" href="#" class="btn-primary">📊 View Responses</a>
+            <a href="dashboard.html" class="btn-outline">Back to Dashboard</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get('id');
+    const base = window.location.origin + window.location.pathname.replace('share.html', '');
+    const link = base + 'form.html?id=' + formId;
+
+    document.getElementById('shareLink').value = link;
+    document.getElementById('previewBtn').href = link;
+    document.getElementById('analyticsBtn').href = 'analytics.html?id=' + formId;
+
+    // Load form title
+    function loadTitle() {
+      fetch('http://localhost:5000/api/forms/' + formId)
+        .then(r => r.json())
+        .then(d => { if (d.title) document.getElementById('formTitleHead').textContent = 'Share: ' + d.title; })
+        .catch(() => {
+          const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+          const f = forms.find(x => x.id === formId);
+          if (f) document.getElementById('formTitleHead').textContent = 'Share: ' + f.title;
+        });
+    }
+    if (formId) loadTitle();
+
+    function copyLink() {
+      navigator.clipboard.writeText(link).then(() => showToast('Link copied to clipboard!'));
+    }
+
+    function shareWA() {
+      window.open('https://wa.me/?text=' + encodeURIComponent('Please fill out this form: ' + link));
+    }
+
+    function shareEmail() {
+      window.location.href = 'mailto:?subject=Please fill out this form&body=' + encodeURIComponent('Hi,\n\nPlease fill out this form:\n' + link);
+    }
+  </script>
+</body>
+</html>

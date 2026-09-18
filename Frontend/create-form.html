@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Create Form – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+    <div class="nav-links">
+      <a href="dashboard.html">← Back to Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+    <div class="sidebar">
+      <a href="dashboard.html">📋 My Forms</a>
+      <a href="create-form.html" class="active">➕ New Form</a>
+      <a href="analytics.html">📊 Analytics</a>
+      <a href="question-gen.html">💡 Question Ideas</a>
+    </div>
+    <div class="main-content">
+      <div class="page-header">
+        <h1>Create a New Form</h1>
+        <p>Fill in the details and add your questions below.</p>
+      </div>
+
+      <div class="builder-wrap">
+        <!-- Form Info -->
+        <div class="builder-section">
+          <h3>Form Details</h3>
+          <div class="form-group">
+            <label>Form Title *</label>
+            <input type="text" id="formTitle" placeholder="e.g. Customer Feedback Survey" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="formDesc" placeholder="Short description of what this form is for..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="formCategory">
+              <option value="feedback">Feedback</option>
+              <option value="event">Event</option>
+              <option value="quiz">Quiz</option>
+              <option value="registration">Registration</option>
+              <option value="research">Research</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Questions -->
+        <div class="builder-section">
+          <h3>Questions</h3>
+          <div id="questionsList"></div>
+          <div class="flex-row mt-10">
+            <button class="btn-outline" onclick="addQuestion('text')">+ Text Answer</button>
+            <button class="btn-outline" onclick="addQuestion('mcq')">+ Multiple Choice</button>
+            <button class="btn-outline" onclick="addQuestion('rating')">+ Rating (1–5)</button>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex-row">
+          <button class="btn-primary" onclick="saveForm()">Save & Publish Form</button>
+          <a href="dashboard.html" class="btn-outline">Cancel</a>
+        </div>
+        <p class="error-msg" id="errMsg" style="display:none;margin-top:10px;"></p>
+        <p class="success-msg" id="okMsg" style="display:none;margin-top:10px;"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let qCount = 0;
+
+    function addQuestion(type) {
+      qCount++;
+      const id = 'q_' + qCount;
+      const div = document.createElement('div');
+      div.className = 'question-block';
+      div.id = id;
+
+      let extra = '';
+      if (type === 'mcq') {
+        extra = `
+          <div class="options-list" id="opts_${id}">
+            <div class="option-item"><input type="text" placeholder="Option 1" /><button onclick="removeOpt(this)">✕</button></div>
+            <div class="option-item"><input type="text" placeholder="Option 2" /><button onclick="removeOpt(this)">✕</button></div>
+          </div>
+          <button class="add-opt-btn" onclick="addOpt('opts_${id}')">+ Add option</button>
+        `;
+      }
+
+      div.innerHTML = `
+        <button class="remove-q" onclick="document.getElementById('${id}').remove()">✕</button>
+        <div class="q-row">
+          <input type="text" placeholder="Question ${qCount}" class="q-text" style="flex:2;" />
+          <select class="q-type" onchange="changeType(this, '${id}')">
+            <option value="text" ${type==='text'?'selected':''}>Text</option>
+            <option value="mcq" ${type==='mcq'?'selected':''}>Multiple Choice</option>
+            <option value="rating" ${type==='rating'?'selected':''}>Rating</option>
+          </select>
+          <label style="font-size:0.8rem;display:flex;align-items:center;gap:5px;">
+            <input type="checkbox" class="q-required" /> Required
+          </label>
+        </div>
+        <div class="q-extra mt-10">${extra}</div>
+      `;
+      document.getElementById('questionsList').appendChild(div);
+    }
+
+    function changeType(sel, id) {
+      const extra = document.querySelector('#' + id + ' .q-extra');
+      if (sel.value === 'mcq') {
+        extra.innerHTML = `
+          <div class="options-list" id="opts_${id}">
+            <div class="option-item"><input type="text" placeholder="Option 1"/><button onclick="removeOpt(this)">✕</button></div>
+            <div class="option-item"><input type="text" placeholder="Option 2"/><button onclick="removeOpt(this)">✕</button></div>
+          </div>
+          <button class="add-opt-btn" onclick="addOpt('opts_${id}')">+ Add option</button>`;
+      } else { extra.innerHTML = ''; }
+    }
+
+    function addOpt(listId) {
+      const list = document.getElementById(listId);
+      const n = list.children.length + 1;
+      const d = document.createElement('div');
+      d.className = 'option-item';
+      d.innerHTML = `<input type="text" placeholder="Option ${n}"/><button onclick="removeOpt(this)">✕</button>`;
+      list.appendChild(d);
+    }
+
+    function removeOpt(btn) {
+      btn.parentElement.remove();
+    }
+
+    function saveForm() {
+      const title = document.getElementById('formTitle').value.trim();
+      const desc = document.getElementById('formDesc').value.trim();
+      const category = document.getElementById('formCategory').value;
+      const err = document.getElementById('errMsg');
+      const ok = document.getElementById('okMsg');
+      err.style.display = 'none'; ok.style.display = 'none';
+
+      if (!title) { err.textContent = 'Please enter a form title.'; err.style.display = 'block'; return; }
+
+      const blocks = document.querySelectorAll('.question-block');
+      if (!blocks.length) { err.textContent = 'Add at least one question.'; err.style.display = 'block'; return; }
+
+      const questions = [];
+      blocks.forEach(b => {
+        const text = b.querySelector('.q-text').value.trim();
+        const type = b.querySelector('.q-type').value;
+        const required = b.querySelector('.q-required').checked;
+        if (!text) return;
+        let options = [];
+        if (type === 'mcq') {
+          b.querySelectorAll('.options-list input').forEach(i => { if (i.value.trim()) options.push(i.value.trim()); });
+        }
+        questions.push({ text, type, required, options });
+      });
+
+      if (!questions.length) { err.textContent = 'Please fill in at least one question.'; err.style.display = 'block'; return; }
+
+      const form = {
+        id: 'f_' + Date.now(),
+        title, description: desc, category,
+        questions, responses: 0,
+        created_at: new Date().toISOString()
+      };
+
+      fetch('http://localhost:5000/api/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
+      .then(r => r.json())
+      .then(data => {
+        ok.textContent = 'Form created! Redirecting...';
+        ok.style.display = 'block';
+        setTimeout(() => window.location.href = 'share.html?id=' + (data.id || form.id), 1000);
+      })
+      .catch(() => {
+        const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+        forms.push(form);
+        localStorage.setItem('ff_forms', JSON.stringify(forms));
+        ok.textContent = 'Form saved! Redirecting...';
+        ok.style.display = 'block';
+        setTimeout(() => window.location.href = 'share.html?id=' + form.id, 1000);
+      });
+    }
+
+    // Add a default question on load
+    addQuestion('text');
+  </script>
+</body>
+</html>

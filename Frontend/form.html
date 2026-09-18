@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fill Form – FormFlow</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+</head>
+<body style="background:var(--bg);">
+  <nav class="navbar">
+    <div class="nav-logo">FormFlow</div>
+  </nav>
+
+  <div class="public-form-wrap">
+    <div class="public-form-card" id="formContainer">
+      <p class="text-muted">Loading form...</p>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get('id');
+
+    function loadForm() {
+      fetch('http://localhost:5000/api/forms/' + formId)
+        .then(r => r.json())
+        .then(renderForm)
+        .catch(() => {
+          const forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+          const f = forms.find(x => x.id === formId);
+          if (f) renderForm(f);
+          else document.getElementById('formContainer').innerHTML = '<p style="color:var(--danger);">Form not found.</p>';
+        });
+    }
+
+    function renderForm(form) {
+      const c = document.getElementById('formContainer');
+      let html = `<h1>${form.title}</h1>`;
+      if (form.description) html += `<p class="form-desc">${form.description}</p>`;
+      html += '<div id="questions">';
+
+      form.questions.forEach((q, i) => {
+        html += `<div class="q-item"><label>${i+1}. ${q.text}${q.required ? ' <span style="color:var(--danger)">*</span>' : ''}</label>`;
+        if (q.type === 'text') {
+          html += `<textarea id="q${i}" placeholder="Your answer..." rows="3"></textarea>`;
+        } else if (q.type === 'mcq') {
+          html += '<div class="radio-group">';
+          q.options.forEach((opt, j) => {
+            html += `<label><input type="radio" name="q${i}" value="${opt}" /> ${opt}</label>`;
+          });
+          html += '</div>';
+        } else if (q.type === 'rating') {
+          html += '<div class="radio-group" style="flex-direction:row;flex-wrap:wrap;">';
+          for (let r = 1; r <= 5; r++) {
+            html += `<label style="padding:8px 16px;"><input type="radio" name="q${i}" value="${r}" /> ${r} ⭐</label>`;
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+
+      html += `</div>
+        <button class="btn-primary btn-block mt-24" onclick="submitForm(${JSON.stringify(form).replace(/</g,'&lt;')})">Submit Response</button>
+        <p class="error-msg" id="formErr" style="display:none;margin-top:10px;"></p>`;
+      c.innerHTML = html;
+    }
+
+    function submitForm(form) {
+      const err = document.getElementById('formErr');
+      err.style.display = 'none';
+      const answers = {};
+      let valid = true;
+
+      form.questions.forEach((q, i) => {
+        if (q.type === 'text') {
+          const val = document.getElementById('q' + i).value.trim();
+          if (q.required && !val) { valid = false; }
+          answers['q' + i] = val;
+        } else {
+          const sel = document.querySelector(`input[name="q${i}"]:checked`);
+          if (q.required && !sel) { valid = false; }
+          answers['q' + i] = sel ? sel.value : '';
+        }
+      });
+
+      if (!valid) { err.textContent = 'Please answer all required questions.'; err.style.display = 'block'; return; }
+
+      const submission = {
+        form_id: form.id,
+        answers,
+        submitted_at: new Date().toISOString()
+      };
+
+      fetch('http://localhost:5000/api/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(submission)
+      })
+      .then(r => r.json())
+      .then(() => showThanks())
+      .catch(() => {
+        // Save locally
+        const key = 'ff_resp_' + form.id;
+        const existing = JSON.parse(localStorage.getItem(key) || '[]');
+        existing.push(submission);
+        localStorage.setItem(key, JSON.stringify(existing));
+        // Update form response count
+        let forms = JSON.parse(localStorage.getItem('ff_forms') || '[]');
+        forms = forms.map(f => f.id === form.id ? { ...f, responses: (f.responses || 0) + 1 } : f);
+        localStorage.setItem('ff_forms', JSON.stringify(forms));
+        showThanks();
+      });
+    }
+
+    function showThanks() {
+      document.getElementById('formContainer').innerHTML = `
+        <div class="thankyou-box">
+          <div class="tick">✅</div>
+          <h2>Thank you!</h2>
+          <p>Your response has been recorded. We appreciate your time.</p>
+        </div>`;
+    }
+
+    loadForm();
+  </script>
+</body>
+</html>
